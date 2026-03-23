@@ -16,10 +16,10 @@ jobs:
   trigger-bitbucket:
     runs-on: ubuntu-latest
     steps:
-      - name: Call Bitbucket API (Debug Mode)
+      - name: Call Bitbucket API (Bearer Token Mode)
         run: |
           curl -i -sS -X POST \
-            -u "${{ secrets.BITBUCKET_USERNAME }}:${{ secrets.BITBUCKET_APP_PASSWORD }}" \
+            -H "Authorization: Bearer ${{ secrets.BITBUCKET_APP_PASSWORD }}" \
             -H "Content-Type: application/json" \
             "https://api.bitbucket.org/2.0/repositories/sreebitbucket19/first_repo/pipelines/" \
             -d '{
