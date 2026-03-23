@@ -1,0 +1,26 @@
+name: Run PyGithub Script
+
+on:
+  workflow_dispatch: # Allows you to trigger this manually from the Actions tab
+
+jobs:
+  python-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PyGithub
+        run: pip install PyGithub
+
+      - name: Run the Python Script
+        env:
+          # This maps your GitHub Secret to the environment variable the script expects
+          MY_SECRET_TOKEN: ${{ secrets.PAT_TOKEN_1 }}
+        run: python script.py
