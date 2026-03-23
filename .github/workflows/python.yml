@@ -3,6 +3,11 @@ name: Run PyGithub Script
 on:
   workflow_dispatch: # Allows you to trigger this manually from the Actions tab
 
+permissions:
+  contents: write    # Needed to read/write code
+  actions: write     # Mandatory to trigger/manage workflows
+  statuses: write    # Optional: to update commit checkmarks
+
 jobs:
   python-job:
     runs-on: ubuntu-latest

@@ -19,5 +19,5 @@ print(f"✅ Successfully authenticated into: {repo.full_name}")
 print(f"⭐ This repository has {repo.stargazers_count} stars.")
 
 # Example: Triggering another workflow
-# workflow = repo.get_workflow("another-pipeline.yml")
-# workflow.create_dispatch(ref="main")
+workflow = repo.get_workflow("blank.yml")
+workflow.create_dispatch(ref="main")
