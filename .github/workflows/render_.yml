@@ -12,14 +12,14 @@ jobs:
     name: Deploy ${{ matrix.app.name }}
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 1 # Sequential processing to monitor logs easily
+      max-parallel: 2 # Sequential processing to monitor logs easily
       fail-fast: false
       matrix:
         app:
-          - { name: "vertx_java", service_id: "srv-d31r7rvdiees7386qm90" }
-          - { name: "micronaut_java", service_id: "srv-d31qtsjipnbc73cjitog" }
-          - { name: "quarkus_java", service_id: "srv-d31qvandiees7386i4qg" }
-          - { name: "Spring_Boot_Java", service_id: "srv-d1r7i8ripnbc73f57ag0" }
+          # - { name: "vertx_java", service_id: "srv-d31r7rvdiees7386qm90" }
+          # failed - { name: "micronaut_java", service_id: "srv-d31qtsjipnbc73cjitog" }
+          # - { name: "quarkus_java", service_id: "srv-d31qvandiees7386i4qg" }
+          # - { name: "Spring_Boot_Java", service_id: "srv-d1r7i8ripnbc73f57ag0" }
           - { name: "helidon_java", service_id: "srv-d316a7vdiees73aitq00" }
           - { name: "javalin_java", service_id: "srv-d31t4ubuibrs739aqgu0" }
           - { name: "helidon_kotlin", service_id: "srv-d316asogjchc73ap1tk0" }
