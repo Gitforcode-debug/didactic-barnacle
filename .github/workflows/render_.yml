@@ -44,6 +44,6 @@ jobs:
           echo "🚀 Triggering deploy for ${{ matrix.app.name }} (${{ matrix.app.service_id }})"
           
           # This command will use the Render CLI to trigger the build
-          render deploys create ${{ matrix.app.service_id }} --wait
+          render deploys create ${{ matrix.app.service_id }} --wait --yes
           
           echo "✅ Deployment for ${{ matrix.app.name }} initiated."
