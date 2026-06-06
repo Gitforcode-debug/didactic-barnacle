@@ -52,13 +52,16 @@ jobs:
           # 6. Bridge GitHub Secrets securely to the isolated Colab container filesystem
           echo "with open('/content/tg_secrets.txt', 'w') as f: f.write('API_ID=$SECRET_API_ID\nAPI_HASH=$SECRET_API_HASH\nBOT_TOKEN=$SECRET_BOT_TOKEN\n')" | colab --auth adc exec -s github_job_1
 
-          # 7. Execute the wrapper notebook with an increased 30-minute timeout buffer
+          # 7. Execute the wrapper notebook to download the files
           colab --auth adc exec -s github_job_1 -f run_scripts.ipynb --timeout 1800
 
-          # 8. Pull the finished output artifacts
+          # 8. CRITICAL FIX: Compress the downloaded outputs on the remote Colab container
+          echo "import os; os.system('zip -r /content/outputs.zip /content/outputs')" | colab --auth adc exec -s github_job_1
+
+          # 9. Pull the finished output artifacts back to GitHub
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
-          # 9. Extract downloaded artifacts locally
+          # 10. Extract downloaded artifacts locally on the GitHub Runner
           mkdir -p outputs
           unzip -o outputs.zip -d outputs/
           cp run_scripts.ipynb outputs/executed_runner_log.ipynb
