@@ -55,15 +55,15 @@ jobs:
           # 7. Execute the wrapper notebook to download the files
           colab --auth adc exec -s github_job_1 -f run_scripts.ipynb --timeout 1800
 
-          # 8. FIXED: CD into /content first so the zip file does not contain nested absolute paths
+          # 8. CD into /content first so the zip file does not contain nested absolute paths
           echo "import os; os.system('cd /content && zip -r outputs.zip outputs')" | colab --auth adc exec -s github_job_1
 
           # 9. Pull the finished output artifacts back to GitHub
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
-          # 10. FIXED: Unzip directly into the root workspace (.) to cleanly build the ./outputs/ folder
-          unzip -o outputs.zip -d .
-          cp run_scripts.ipynb outputs/executed_runner_log.ipynb
+          # 10. CRITICAL FIX: Unzip into the parent directory (..) so it lands in the true root workspace
+          unzip -o outputs.zip -d ..
+          cp run_scripts.ipynb ../outputs/executed_runner_log.ipynb
 
       - name: Upload Downloaded Files
         uses: actions/upload-artifact@v4
