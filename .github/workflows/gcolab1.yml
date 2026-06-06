@@ -17,7 +17,9 @@ jobs:
 
       - name: Install Google Colab CLI
         run: |
+          pip install --upgrade pip
           pip install git+https://github.com/googlecolab/google-colab-cli
+          which colab-cli || pip show google-colab-cli
 
       - name: Restore Headless Google ADC Credentials
         run: |
