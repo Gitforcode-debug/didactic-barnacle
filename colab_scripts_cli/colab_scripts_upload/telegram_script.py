@@ -87,6 +87,9 @@ async def main():
 
     # Disconnect the client when done
     await client.disconnect()
+    
+    # FORCED IMMEDIATE EXIT: Prevents the remote Jupyter kernel from hanging
+    os._exit(0)
 
 # Run the main async function when executed directly
 if __name__ == '__main__':
