@@ -1,0 +1,61 @@
+name: Remote GitHub-to-Colab Runner 1
+
+on:
+  workflow_dispatch: # Allows you to run it manually via the GitHub Actions UI button
+
+jobs:
+  run-notebook:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Google Colab CLI
+        run: |
+          pip install git+https://github.com/googlecolab/google-colab-cli
+
+      - name: Restore Headless Google ADC Credentials
+        run: |
+          mkdir -p ~/.config/gcloud
+          echo '${{ secrets.GCP_ADC_JSON }}' > ~/.config/gcloud/application_default_credentials.json
+
+
+      - name: Run on Free Colab GPU
+        run: |
+
+          cd colab_scripts_cli
+
+          # 1. Provision the free T4 GPU machine using the native entry point
+          colab-cli new -s github_job_1 --gpu T4
+          
+          # 2. Upload your raw python code directory directly onto the backend instance
+          colab-cli upload -s github_job_1 colab_scripts_upload/ /content/colab_scripts_upload/
+
+          # 3. Execute the wrapper notebook targeting the raw .py logic
+          colab-cli exec -s github_job_1 -f run_scripts.ipynb
+
+          # 4. Pull the finished output artifacts
+          colab-cli download -s github_job_1 /content/outputs.zip outputs.zip
+          
+          # 5. Extract and merge into target destination directory
+          mkdir -p outputs
+          unzip -o outputs.zip -d outputs/
+
+          # Copy executed schema logs into target folder
+          cp run_scripts.ipynb outputs/executed_runner_log.ipynb
+
+      - name: Upload Downloaded Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: downloaded-telegram-files
+          path: outputs/ 
+
+      - name: Hard Shutdown Cleanup
+        if: always() # Essential: forces an instance deletion even if the core execution steps fail
+        run: |
+          colab-cli stop -s github_job_1
