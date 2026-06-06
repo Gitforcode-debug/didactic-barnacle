@@ -4,16 +4,30 @@ import sys
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 
-API_ID = 'PLACEHOLDER_API_ID'
-API_HASH = 'PLACEHOLDER_API_HASH'
-BOT_TOKEN = 'PLACEHOLDER_BOT_TOKEN'
+def load_secure_credential(key):
+    """Reads secrets from the injected workflow file, falling back to local environment variables."""
+    secrets_file_path = '/content/tg_secrets.txt'
+    if os.path.exists(secrets_file_path):
+        with open(secrets_file_path, 'r') as f:
+            for line in f:
+                if line.startswith(f"{key}="):
+                    return line.strip().split('=', 1)[1]
+    return os.environ.get(key)
+
+# Read coordinates across the execution environment boundary
+raw_api_id = load_secure_credential('API_ID')
+API_HASH = load_secure_credential('API_HASH')
+BOT_TOKEN = load_secure_credential('BOT_TOKEN')
+
+# Telethon requires API_ID to be an integer type
+API_ID = int(raw_api_id) if raw_api_id and raw_api_id.isdigit() else raw_api_id
 
 # Directory to save the PDF. Can be overridden by an environment variable.
 DOWNLOAD_DIR = os.environ.get('DOWNLOAD_DIR', 'outputs/')
 
 # Ensure essential credentials are provided
 if not all([API_ID, API_HASH, BOT_TOKEN]):
-    raise ValueError("API_ID, API_HASH, and BOT_TOKEN must be set either in Colab secrets or as environment variables.")
+    raise ValueError("API_ID, API_HASH, and BOT_TOKEN must be set via GitHub Secrets or environment variables.")
 
 number = 1
 
