@@ -28,7 +28,6 @@ jobs:
 
       - name: Run on Free Colab GPU
         env:
-          # Pull keys cleanly from GitHub Secrets into the Actions workspace
           SECRET_API_ID: ${{ secrets.API_ID }}
           SECRET_API_HASH: ${{ secrets.API_HASH }}
           SECRET_BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
@@ -53,8 +52,8 @@ jobs:
           # 6. Bridge GitHub Secrets securely to the isolated Colab container filesystem
           echo "with open('/content/tg_secrets.txt', 'w') as f: f.write('API_ID=$SECRET_API_ID\nAPI_HASH=$SECRET_API_HASH\nBOT_TOKEN=$SECRET_BOT_TOKEN\n')" | colab --auth adc exec -s github_job_1
 
-          # 7. Execute the wrapper notebook targeting your logic
-          colab --auth adc exec -s github_job_1 -f run_scripts.ipynb
+          # 7. Execute the wrapper notebook with an increased 30-minute timeout buffer
+          colab --auth adc exec -s github_job_1 -f run_scripts.ipynb --timeout 1800
 
           # 8. Pull the finished output artifacts
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
