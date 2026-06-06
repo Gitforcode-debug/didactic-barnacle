@@ -1,7 +1,7 @@
 name: Remote GitHub-to-Colab Runner 1
 
 on:
-  workflow_dispatch: # Allows you to run it manually via the GitHub Actions UI button
+  workflow_dispatch: # Allows manual execution via the GitHub UI
 
 jobs:
   run-notebook:
@@ -27,31 +27,39 @@ jobs:
           echo '${{ secrets.GCP_ADC_JSON }}' > ~/.config/gcloud/application_default_credentials.json
 
       - name: Run on Free Colab GPU
+        env:
+          # Pull keys cleanly from GitHub Secrets into the Actions workspace
+          SECRET_API_ID: ${{ secrets.API_ID }}
+          SECRET_API_HASH: ${{ secrets.API_HASH }}
+          SECRET_BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         run: |
           cd colab_scripts_cli
 
           # 1. Provision the free T4 GPU machine
           colab --auth adc new -s github_job_1 --gpu T4
           
-          # 2. Compress the folder for uploading
+          # 2. Compress your script folder
           zip -r colab_scripts_upload.zip colab_scripts_upload/
 
           # 3. Upload the compressed archive
           colab --auth adc upload -s github_job_1 colab_scripts_upload.zip /content/colab_scripts_upload.zip
 
-          # 4. Unzip the directory on the remote container
+          # 4. Extract the directory on the remote container side
           echo "import zipfile; zipfile.ZipFile('/content/colab_scripts_upload.zip').extractall('/content/')" | colab --auth adc exec -s github_job_1
 
-          # 5. CRITICAL FIX: Install telethon on the remote Colab container
+          # 5. Remote Environment Setup: Install telethon 
           echo "import os; os.system('pip install telethon')" | colab --auth adc exec -s github_job_1
 
-          # 6. Execute the wrapper notebook targeting your logic
+          # 6. Bridge GitHub Secrets securely to the isolated Colab container filesystem
+          echo "with open('/content/tg_secrets.txt', 'w') as f: f.write('API_ID=$SECRET_API_ID\nAPI_HASH=$SECRET_API_HASH\nBOT_TOKEN=$SECRET_BOT_TOKEN\n')" | colab --auth adc exec -s github_job_1
+
+          # 7. Execute the wrapper notebook targeting your logic
           colab --auth adc exec -s github_job_1 -f run_scripts.ipynb
 
-          # 7. Pull the finished output artifacts
+          # 8. Pull the finished output artifacts
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
-          # 8. Extract and merge into target destination directory
+          # 9. Extract downloaded artifacts locally
           mkdir -p outputs
           unzip -o outputs.zip -d outputs/
           cp run_scripts.ipynb outputs/executed_runner_log.ipynb
@@ -63,6 +71,6 @@ jobs:
           path: outputs/ 
 
       - name: Hard Shutdown Cleanup
-        if: always() # Essential: forces an instance deletion even if the core execution steps fail
+        if: always() # Forces session teardown even if preceding execution steps crash
         run: |
           colab --auth adc stop -s github_job_1
