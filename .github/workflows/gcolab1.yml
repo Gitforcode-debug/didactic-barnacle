@@ -31,16 +31,16 @@ jobs:
           cd colab_scripts_cli
 
           # 1. Provision the free T4 GPU machine using the native entry point
-          colab new -s github_job_1 --gpu T4
+          colab --auth adc new -s github_job_1 --gpu T4
           
           # 2. Upload your raw python code directory directly onto the backend instance
-          colab upload -s github_job_1 colab_scripts_upload/ /content/colab_scripts_upload/
+          colab --auth adc upload -s github_job_1 colab_scripts_upload/ /content/colab_scripts_upload/
 
           # 3. Execute the wrapper notebook targeting the raw .py logic
-          colab exec -s github_job_1 -f run_scripts.ipynb
+          colab --auth adc exec -s github_job_1 -f run_scripts.ipynb
 
           # 4. Pull the finished output artifacts
-          colab download -s github_job_1 /content/outputs.zip outputs.zip
+          colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
           # 5. Extract and merge into target destination directory
           mkdir -p outputs
@@ -58,4 +58,4 @@ jobs:
       - name: Hard Shutdown Cleanup
         if: always() # Essential: forces an instance deletion even if the core execution steps fail
         run: |
-          colab stop -s github_job_1
+          colab --auth adc stop -s github_job_1
