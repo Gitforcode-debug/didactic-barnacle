@@ -33,22 +33,25 @@ jobs:
           # 1. Provision the free T4 GPU machine
           colab --auth adc new -s github_job_1 --gpu T4
           
-          # 2. Compress the folder since 'colab upload' expects a single file
+          # 2. Compress the folder for uploading
           zip -r colab_scripts_upload.zip colab_scripts_upload/
 
-          # 3. Upload the compressed zip archive onto the backend instance
+          # 3. Upload the compressed archive
           colab --auth adc upload -s github_job_1 colab_scripts_upload.zip /content/colab_scripts_upload.zip
 
-          # 4. Unzip it directly on the remote Colab filesystem via piped Python stdin
+          # 4. Unzip the directory on the remote container
           echo "import zipfile; zipfile.ZipFile('/content/colab_scripts_upload.zip').extractall('/content/')" | colab --auth adc exec -s github_job_1
 
-          # 5. Execute the wrapper notebook targeting your extracted logic
+          # 5. CRITICAL FIX: Install telethon on the remote Colab container
+          echo "import os; os.system('pip install telethon')" | colab --auth adc exec -s github_job_1
+
+          # 6. Execute the wrapper notebook targeting your logic
           colab --auth adc exec -s github_job_1 -f run_scripts.ipynb
 
-          # 6. Pull the finished output artifacts
+          # 7. Pull the finished output artifacts
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
-          # 7. Extract and merge into target destination directory
+          # 8. Extract and merge into target destination directory
           mkdir -p outputs
           unzip -o outputs.zip -d outputs/
           cp run_scripts.ipynb outputs/executed_runner_log.ipynb
