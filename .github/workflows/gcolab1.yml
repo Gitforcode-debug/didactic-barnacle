@@ -55,15 +55,14 @@ jobs:
           # 7. Execute the wrapper notebook to download the files
           colab --auth adc exec -s github_job_1 -f run_scripts.ipynb --timeout 1800
 
-          # 8. CRITICAL FIX: Compress the downloaded outputs on the remote Colab container
-          echo "import os; os.system('zip -r /content/outputs.zip /content/outputs')" | colab --auth adc exec -s github_job_1
+          # 8. FIXED: CD into /content first so the zip file does not contain nested absolute paths
+          echo "import os; os.system('cd /content && zip -r outputs.zip outputs')" | colab --auth adc exec -s github_job_1
 
           # 9. Pull the finished output artifacts back to GitHub
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
-          # 10. Extract downloaded artifacts locally on the GitHub Runner
-          mkdir -p outputs
-          unzip -o outputs.zip -d outputs/
+          # 10. FIXED: Unzip directly into the root workspace (.) to cleanly build the ./outputs/ folder
+          unzip -o outputs.zip -d .
           cp run_scripts.ipynb outputs/executed_runner_log.ipynb
 
       - name: Upload Downloaded Files
