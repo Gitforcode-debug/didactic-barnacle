@@ -30,23 +30,27 @@ jobs:
         run: |
           cd colab_scripts_cli
 
-          # 1. Provision the free T4 GPU machine using the native entry point
+          # 1. Provision the free T4 GPU machine
           colab --auth adc new -s github_job_1 --gpu T4
           
-          # 2. Upload your raw python code directory directly onto the backend instance
-          colab --auth adc upload -s github_job_1 colab_scripts_upload/ /content/colab_scripts_upload/
+          # 2. Compress the folder since 'colab upload' expects a single file
+          zip -r colab_scripts_upload.zip colab_scripts_upload/
 
-          # 3. Execute the wrapper notebook targeting the raw .py logic
+          # 3. Upload the compressed zip archive onto the backend instance
+          colab --auth adc upload -s github_job_1 colab_scripts_upload.zip /content/colab_scripts_upload.zip
+
+          # 4. Unzip it directly on the remote Colab filesystem via piped Python stdin
+          echo "import zipfile; zipfile.ZipFile('/content/colab_scripts_upload.zip').extractall('/content/')" | colab --auth adc exec -s github_job_1
+
+          # 5. Execute the wrapper notebook targeting your extracted logic
           colab --auth adc exec -s github_job_1 -f run_scripts.ipynb
 
-          # 4. Pull the finished output artifacts
+          # 6. Pull the finished output artifacts
           colab --auth adc download -s github_job_1 /content/outputs.zip outputs.zip
           
-          # 5. Extract and merge into target destination directory
+          # 7. Extract and merge into target destination directory
           mkdir -p outputs
           unzip -o outputs.zip -d outputs/
-
-          # Copy executed schema logs into target folder
           cp run_scripts.ipynb outputs/executed_runner_log.ipynb
 
       - name: Upload Downloaded Files
