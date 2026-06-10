@@ -45,10 +45,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Replace 'YOUR_USERNAME_OR_ORG' with your actual GitHub username or organization
-          repository: 'aqwertyuiop48/programming_languages'
+          repository: 'YOUR_USERNAME_OR_ORG/programming_languages'
           
           # Clones directly into the root workspace so './golang' aligns perfectly
           path: .
+          
+          # REQUIRED ONLY IF THE REPOSITORY IS PRIVATE:
+          # Uncomment the line below and use a Personal Access Token (PAT) saved in secrets
+          # token: ${{ secrets.YOUR_PERSONAL_ACCESS_TOKEN }}
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -89,9 +93,15 @@ jobs:
         run: |
           go mod tidy
           go mod download
-          # goeval reads the same GOPATH; ensure gorilla/mux is fetched into
-          # the module cache so it can resolve the import inside the eval'd snippet.
+          # goeval runs the embedded snippet in GOPATH mode (legacy `go run -` /
+          # tmp .go file under $GOPATH), NOT module mode — so `go get` into the
+          # module cache is not enough. Clone the import into $GOPATH/src too.
           go get github.com/gorilla/mux@v1.8.0 || true
+          GOPATH_DIR="$(go env GOPATH)"
+          mkdir -p "$GOPATH_DIR/src/github.com/gorilla"
+          rm -rf "$GOPATH_DIR/src/github.com/gorilla/mux"
+          git clone --depth=1 --branch=v1.8.0 https://github.com/gorilla/mux.git \
+            "$GOPATH_DIR/src/github.com/gorilla/mux"
 
       - name: Start ${{ matrix.name }} entry point in background
         working-directory: ./golang/6_go_movies_crud_1
