@@ -1,14 +1,16 @@
-name: Go Movies CRUD 1 (polyglot goeval bridges)
+name: Go TCP Socket Server + Client (paired go run)
 
-# Exercises golang/6_go_movies_crud_1/ — three polyglot entry points that all
-# end up spinning the same gorilla/mux REST server on :8080 via `goeval`:
-#   * main_2.py   — Python  -> subprocess.run(["goeval", ...])
-#   * main_2.js   — Node    -> child_process.execFile("python", ["-c", ...])
-#                               -> subprocess.run(["goeval", ...])
-#   * main_3.go   — Go      -> os/exec        -> python -c -> subprocess
-#                               -> goeval
-# Each entry point is launched in turn, hit with the same 5-endpoint CRUD
-# curl battery, asserted with jq, then torn down before the next runs.
+# Exercises golang/5_socket_programming/ — paired Go programs where one
+# binds a TCP listener and the other dials it. Matrix runs both pairs:
+#   * pair1: server.go (:9988)   + client.go    — single request/response
+#   * pair2: server_2.go (:8000) + client_2.go  — streaming numbered lines
+#
+# For each pair the workflow:
+#   1. Backgrounds the server with `nohup go run server.go &`
+#   2. Waits for the configured TCP port to accept connections
+#   3. Runs the client (timeboxed for the streaming variant)
+#   4. Asserts the expected exchange happened in server.log / client.log
+#   5. Tears down the server, uploads both logs as artifacts
 
 on:
   # push:
@@ -25,15 +27,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: python
-            launcher: python main_2.py
-          - name: node
-            launcher: node main_2.js
-          - name: go
-            launcher: go run main_3.go
+          - name: pair1
+            server_file: server.go
+            client_file: client.go
+            port: 9988
+            client_timeout: 0          # client exits on its own
+            server_expect: "Received:  Hello Server! Greetings."
+            client_expect: "Thanks! Got your message:Hello Server! Greetings."
+          - name: pair2
+            server_file: server_2.go
+            client_file: client_2.go
+            port: 8000
+            client_timeout: 5          # streaming — kill after 5 s
+            server_expect: "data from server"
+            client_expect: "data from server"
 
     steps:
-      - name: Checkout Current Repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: false
@@ -59,144 +69,66 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Prepare output dir
+        run: mkdir -p socket_out_${{ matrix.name }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install goeval (clone + go install)
+      - name: Start TCP server in background (${{ matrix.server_file }} on :${{ matrix.port }})
+        working-directory: ./golang/5_socket_programming
         run: |
-          git clone https://github.com/dolmen-go/goeval.git /tmp/goeval
-          cd /tmp/goeval
-          go install .
-
-      - name: Add Go bin directory to PATH
-        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
-
-      - name: Verify goeval installation
-        run: |
-          which goeval
-          goeval -i fmt 'fmt.Println("goeval OK")'
-
-      - name: Install Node.js helper dependency (sprintf-js)
-        working-directory: ./golang/6_go_movies_crud_1
-        if: matrix.name == 'node'
-        run: npm install sprintf-js
-
-      - name: Install Go module dependencies (gorilla/mux for goeval)
-        working-directory: ./golang/6_go_movies_crud_1
-        run: |
-          go mod tidy
-          go mod download
-          # goeval runs the embedded snippet in GOPATH mode (legacy `go run -` /
-          # tmp .go file under $GOPATH), NOT module mode — so `go get` into the
-          # module cache is not enough. Clone the import into $GOPATH/src too.
-          go get github.com/gorilla/mux@v1.8.0 || true
-          GOPATH_DIR="$(go env GOPATH)"
-          mkdir -p "$GOPATH_DIR/src/github.com/gorilla"
-          rm -rf "$GOPATH_DIR/src/github.com/gorilla/mux"
-          git clone --depth=1 --branch=v1.8.0 https://github.com/gorilla/mux.git \
-            "$GOPATH_DIR/src/github.com/gorilla/mux"
-
-      - name: Start ${{ matrix.name }} entry point in background
-        working-directory: ./golang/6_go_movies_crud_1
-        run: |
-          mkdir -p ../../crud_out_${{ matrix.name }}
-          nohup ${{ matrix.launcher }} > ../../crud_out_${{ matrix.name }}/launcher.log 2>&1 &
-          echo $! > /tmp/launcher_pid
-          # Wait up to 60 s for :8080 to accept connections
-          # (goeval first compiles the embedded snippet, which can take ~20-40 s)
+          out=../../socket_out_${{ matrix.name }}
+          nohup go run ${{ matrix.server_file }} > "$out/server.log" 2>&1 &
+          echo $! > /tmp/server_pid_${{ matrix.name }}
+          # Wait up to 60 s for the server port to start accepting connections
+          # (cold `go run` compile of server.go takes ~20 s on fresh runners)
           for i in $(seq 1 60); do
-            if curl -fs http://localhost:8080/movies >/dev/null 2>&1; then
-              echo "Server is up after ${i}s (entry: ${{ matrix.name }})"
+            if (echo > /dev/tcp/127.0.0.1/${{ matrix.port }}) >/dev/null 2>&1; then
+              echo "Server is listening on :${{ matrix.port }} after ${i}s"
               break
             fi
             sleep 1
           done
-          # Final readiness probe — if this fails the next step will surface the
-          # error with a non-zero curl exit code.
-          curl -fsS http://localhost:8080/movies >/dev/null
+          # Final readiness probe — fail the step if it never came up
+          (echo > /dev/tcp/127.0.0.1/${{ matrix.port }}) 2>/dev/null
 
-      - name: Exercise all 5 CRUD endpoints with curl
+      - name: Run TCP client (${{ matrix.client_file }})
+        working-directory: ./golang/5_socket_programming
         run: |
-          out=crud_out_${{ matrix.name }}
-          mkdir -p "$out"
+          out=../../socket_out_${{ matrix.name }}
+          if [ "${{ matrix.client_timeout }}" -gt 0 ]; then
+            # Streaming client — timebox the run
+            timeout --preserve-status -s INT ${{ matrix.client_timeout }} \
+              go run ${{ matrix.client_file }} > "$out/client.log" 2>&1 || true
+          else
+            go run ${{ matrix.client_file }} > "$out/client.log" 2>&1
+          fi
+          echo "--- client.log ---"
+          cat "$out/client.log"
 
-          echo "=== GET /movies (initial seed: 2 movies) ==="
-          curl -sS -o "$out/01_get_all.json" -w "HTTP %{http_code}\n" http://localhost:8080/movies
-          cat "$out/01_get_all.json"; echo
-
-          echo "=== GET /movies/1 (single record) ==="
-          curl -sS -o "$out/02_get_one.json" -w "HTTP %{http_code}\n" http://localhost:8080/movies/1
-          cat "$out/02_get_one.json"; echo
-
-          echo "=== POST /movies (create) ==="
-          curl -sS -o "$out/03_post_create.json" -w "HTTP %{http_code}\n" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d '{"isbn":"99999","title":"Movie Three","director":{"firstname":"Ada","lastname":"Lovelace"}}' \
-            http://localhost:8080/movies
-          cat "$out/03_post_create.json"; echo
-
-          echo "=== PUT /movies/1 (update) ==="
-          curl -sS -o "$out/04_put_update.json" -w "HTTP %{http_code}\n" \
-            -H "Content-Type: application/json" \
-            -X PUT \
-            -d '{"isbn":"438227-v2","title":"Movie One (Updated)","director":{"firstname":"John","lastname":"Doe"}}' \
-            http://localhost:8080/movies/1
-          cat "$out/04_put_update.json"; echo
-
-          echo "=== DELETE /movies/2 ==="
-          curl -sS -o "$out/05_delete.json" -w "HTTP %{http_code}\n" \
-            -X DELETE http://localhost:8080/movies/2
-          cat "$out/05_delete.json"; echo
-
-          echo "=== GET /movies (final state after CRUD ops) ==="
-          curl -sS -o "$out/06_get_final.json" -w "HTTP %{http_code}\n" http://localhost:8080/movies
-          cat "$out/06_get_final.json"; echo
-
-      - name: Assert CRUD results
+      - name: Assert exchange happened
         run: |
-          out=crud_out_${{ matrix.name }}
-          test "$(jq 'length' $out/01_get_all.json)" = "2"
-          test "$(jq -r '.title' $out/02_get_one.json)" = "Movie One"
-          test "$(jq -r '.title' $out/03_post_create.json)" = "Movie Three"
-          test "$(jq -r '.title' $out/04_put_update.json)" = "Movie One (Updated)"
-          test "$(jq 'length' $out/06_get_final.json)" = "2"
-          ! jq -e '.[] | select(.id == "2")' $out/06_get_final.json
-          echo "All CRUD assertions passed for entry point: ${{ matrix.name }}"
+          out=socket_out_${{ matrix.name }}
+          echo "--- server.log ---"
+          cat "$out/server.log"
+          echo
+          echo "Asserting server saw: ${{ matrix.server_expect }}"
+          grep -F "${{ matrix.server_expect }}" "$out/server.log"
+          echo "Asserting client saw: ${{ matrix.client_expect }}"
+          grep -F "${{ matrix.client_expect }}" "$out/client.log"
+          echo "TCP exchange OK for ${{ matrix.name }}"
 
-      - name: Stop background processes (launcher + goeval + python/node/go children)
+      - name: Stop background TCP server
         if: always()
         run: |
-          if [ -f /tmp/launcher_pid ]; then
-            kill "$(cat /tmp/launcher_pid)" 2>/dev/null || true
+          if [ -f /tmp/server_pid_${{ matrix.name }} ]; then
+            kill "$(cat /tmp/server_pid_${{ matrix.name }})" 2>/dev/null || true
           fi
-          # Tear down every link in the polyglot chain
-          pkill -f "goeval" 2>/dev/null || true
-          pkill -f "main_2.py" 2>/dev/null || true
-          pkill -f "main_2.js" 2>/dev/null || true
-          pkill -f "main_3.go" 2>/dev/null || true
+          pkill -f "go run ${{ matrix.server_file }}" 2>/dev/null || true
           pkill -f "/tmp/go-build" 2>/dev/null || true
 
-      - name: Show launcher log tail
-        if: always()
-        run: |
-          log=crud_out_${{ matrix.name }}/launcher.log
-          if [ -f "$log" ]; then
-            echo "--- last 80 lines of $log ---"
-            tail -n 80 "$log"
-          fi
-
-      - name: Upload CRUD JSON artifacts (per entry point)
+      - name: Upload TCP exchange logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: go-movies-crud-1-${{ matrix.name }}-artifacts
+          name: go-socket-${{ matrix.name }}-artifacts
           path: |
-            crud_out_${{ matrix.name }}/
+            socket_out_${{ matrix.name }}/
