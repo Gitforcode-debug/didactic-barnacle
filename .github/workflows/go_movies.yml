@@ -39,7 +39,11 @@ jobs:
             client_file: client_2.go
             port: 8000
             client_timeout: 5          # streaming — kill after 5 s
-            server_expect: "data from server"
+            # server_2.go only logs what it *receives* from the client
+            # (`received N. data from client`); the lines it sends to the wire
+            # are not echoed to stdout. So the server-side assertion checks the
+            # client's payload as seen by the server.
+            server_expect: "data from client"
             client_expect: "data from server"
 
     steps:
