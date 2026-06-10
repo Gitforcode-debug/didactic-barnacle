@@ -1,133 +1,60 @@
-name: Go Movies CRUD (gorilla/mux REST)
+name: Robot Framework
 
 on:
   # push:
   #   branches:
   #     - main
-  # pull_request:
   workflow_dispatch:
 
 jobs:
-  build:
+  robot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Current Repository
-        uses: actions/checkout@v4
-        with:
-          submodules: false
+    - name: Checkout Current Repository
+      uses: actions/checkout@v4
 
-      # -----------------------------------------------------------------------
-      # NEW STEP: Clone the external programming_languages repository
-      # -----------------------------------------------------------------------
-      - name: Clone programming_languages repository
-        uses: actions/checkout@v4
-        with:
-          repository: 'aqwertyuiop48/programming_languages'
-          
-          # Clones directly into the root workspace so './golang' aligns perfectly
-          path: .
+    # -----------------------------------------------------------------------
+    # NEW STEP: Clone the external programming_languages repository
+    # -----------------------------------------------------------------------
+    - name: Clone programming_languages repository
+      uses: actions/checkout@v4
+      with:
+        # Replace 'YOUR_USERNAME_OR_ORG' with your actual GitHub username or organization
+        repository: 'aqwertyuiop48/programming_languages'
+        
+        # Clones directly into the root workspace so './Python' aligns perfectly
+        path: .
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.21'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
 
-      - name: Install Go module dependencies (gorilla/mux)
-        working-directory: ./golang/6_go_movies_crud
-        run: |
-          go mod tidy
-          go mod download
+    - name: Install Robot Framework dependencies
+      working-directory: ./Python/robot_
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        robot --version || true
 
-      - name: Start gorilla/mux REST server in background
-        working-directory: ./golang/6_go_movies_crud
-        run: |
-          mkdir -p ../../crud_out
-          nohup go run main.go > ../../crud_out/server.log 2>&1 &
-          echo $! > /tmp/movies_pid
-          # Wait for :8080 to accept connections (up to 30s)
-          for i in $(seq 1 30); do
-            if curl -fs http://localhost:8080/movies >/dev/null; then
-              echo "Server is up after ${i}s"
-              break
-            fi
-            sleep 1
-          done
+    - name: Run robot search_test.robot
+      working-directory: ./Python/robot_
+      run: |
+        robot --outputdir robot_out search_test.robot
 
-      - name: Exercise all 5 CRUD endpoints with curl
-        run: |
-          mkdir -p crud_out
+    - name: Assert PASS in report
+      working-directory: ./Python/robot_
+      run: |
+        test -f robot_out/output.xml
+        test -f robot_out/log.html
+        test -f robot_out/report.html
+        grep -F 'Test Robot Get Data' robot_out/output.xml
+        grep -F 'status="PASS"' robot_out/output.xml
 
-          echo "=== GET /movies (initial seed: 2 movies) ==="
-          curl -sS -o crud_out/01_get_all.json -w "HTTP %{http_code}\n" http://localhost:8080/movies
-          cat crud_out/01_get_all.json; echo
-
-          echo "=== GET /movies/1 (single record) ==="
-          curl -sS -o crud_out/02_get_one.json -w "HTTP %{http_code}\n" http://localhost:8080/movies/1
-          cat crud_out/02_get_one.json; echo
-
-          echo "=== POST /movies (create) ==="
-          curl -sS -o crud_out/03_post_create.json -w "HTTP %{http_code}\n" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d '{"isbn":"99999","title":"Movie Three","director":{"firstname":"Ada","lastname":"Lovelace"}}' \
-            http://localhost:8080/movies
-          cat crud_out/03_post_create.json; echo
-
-          echo "=== PUT /movies/1 (update) ==="
-          curl -sS -o crud_out/04_put_update.json -w "HTTP %{http_code}\n" \
-            -H "Content-Type: application/json" \
-            -X PUT \
-            -d '{"isbn":"438227-v2","title":"Movie One (Updated)","director":{"firstname":"John","lastname":"Doe"}}' \
-            http://localhost:8080/movies/1
-          cat crud_out/04_put_update.json; echo
-
-          echo "=== DELETE /movies/2 ==="
-          curl -sS -o crud_out/05_delete.json -w "HTTP %{http_code}\n" \
-            -X DELETE http://localhost:8080/movies/2
-          cat crud_out/05_delete.json; echo
-
-          echo "=== GET /movies (final state after CRUD ops) ==="
-          curl -sS -o crud_out/06_get_final.json -w "HTTP %{http_code}\n" http://localhost:8080/movies
-          cat crud_out/06_get_final.json; echo
-
-      - name: Assert CRUD results
-        run: |
-          # Initial GET must return 2 seeded movies
-          test "$(jq 'length' crud_out/01_get_all.json)" = "2"
-          # GET /movies/1 returns the Movie One record
-          test "$(jq -r '.title' crud_out/02_get_one.json)" = "Movie One"
-          # POST returns the created movie with a generated id
-          test "$(jq -r '.title' crud_out/03_post_create.json)" = "Movie Three"
-          # PUT updates the title
-          test "$(jq -r '.title' crud_out/04_put_update.json)" = "Movie One (Updated)"
-          # After DELETE of id=2 and one POST, final list length must be 2
-          test "$(jq 'length' crud_out/06_get_final.json)" = "2"
-          # Id=2 must no longer be present
-          ! jq -e '.[] | select(.id == "2")' crud_out/06_get_final.json
-          echo "All CRUD assertions passed."
-
-      - name: Stop background Go server
-        if: always()
-        run: |
-          if [ -f /tmp/movies_pid ]; then
-            kill "$(cat /tmp/movies_pid)" 2>/dev/null || true
-          fi
-          pkill -f "go run main.go" 2>/dev/null || true
-          pkill -f "/tmp/go-build" 2>/dev/null || true
-
-      - name: Show server log tail
-        if: always()
-        run: |
-          if [ -f crud_out/server.log ]; then
-            echo "--- last 50 lines of server.log ---"
-            tail -n 50 crud_out/server.log
-          fi
-
-      - name: Upload CRUD JSON artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-movies-crud-artifacts
-          path: |
-            crud_out/
+    - name: Upload Robot artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: robot-framework-artifacts
+        path: Python/robot_/robot_out/
