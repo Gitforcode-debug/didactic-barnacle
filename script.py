@@ -8,7 +8,7 @@ if not token:
     raise ValueError("Token not found! Check your GitHub Secrets mapping.")
 
 g = Github(token)
-current_repo = os.getenv("GITHUB_REPOSITORY", "Gitforcode-debug/didactic-barnacle")
+current_repo = os.getenv("GITHUB_REPOSITORY", "aqwertyuiop48/didactic_barnacle_programming")
 repo = g.get_repo(current_repo)
 
 print(f"✅ Authenticated: {repo.full_name}")
